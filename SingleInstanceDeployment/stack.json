@@ -1,0 +1,115 @@
+{
+    "Resources" : {
+        "VPC" : {
+            "Type" : "AWS::EC2::VPC",
+            "Properties" : {
+                "CidrBlock" : "10.0.0.0/16"
+            }
+        },
+        "Subnet" : {
+            "Type" : "AWS::EC2::Subnet",
+            "Properties" : {
+                "VpcId" : { "Ref" : "VPC" },
+                "CidrBlock" : "10.0.1.0/24",
+                "AvailabilityZone" : "eu-west-1a",
+                "MapPublicIpOnLaunch": true
+            }
+        },
+        "InternetGateway" : {
+            "Type" : "AWS::EC2::InternetGateway",
+            "Properties" : {}
+        },
+        "InternetGatewayToVPC": {
+            "Type" : "AWS::EC2::VPCGatewayAttachment",
+            "Properties" : {
+                "InternetGatewayId" : { "Ref": "InternetGateway" },
+                "VpcId" : { "Ref": "VPC" }
+            }
+        },
+        "RouteTable": {
+            "Type" : "AWS::EC2::RouteTable",
+            "Properties" : {
+                "VpcId" : { "Ref" : "VPC" }
+            }
+        },
+        "Route": {
+            "Type" : "AWS::EC2::Route",
+            "DependsOn" : "InternetGatewayToVPC",
+            "Properties" : {
+                "DestinationCidrBlock" : "0.0.0.0/0",
+                "GatewayId" :  { "Ref" : "InternetGateway" },
+                "RouteTableId" : { "Ref" : "RouteTable" }
+            }
+        },
+        "SubnetRouteTableAssociation" : {
+            "Type" : "AWS::EC2::SubnetRouteTableAssociation",
+            "Properties" : {
+                "SubnetId" : { "Ref" : "Subnet" },
+                "RouteTableId" : { "Ref" : "RouteTable" }
+            }
+        },
+        "InstanceSecurityGroup" : {
+            "Type" : "AWS::EC2::SecurityGroup",
+            "Properties" : {
+                "GroupDescription" : "Allow SSH connections host",
+                "VpcId" : {"Ref" : "VPC"},
+                "SecurityGroupIngress" : [
+                    {
+                        "IpProtocol" : "tcp",
+                        "FromPort" : "80",
+                        "ToPort" : "80",
+                        "CidrIp" : "0.0.0.0/0"
+                    }
+                ],
+                "SecurityGroupEgress" : []
+            }
+        },
+        "Instance" : {
+            "Type" : "AWS::EC2::Instance",
+            "Properties" : {
+                "ImageId" : "ami-3e713f4d",
+                "SubnetId": { "Ref" : "Subnet" },
+                "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+                    "#!/bin/bash\n",
+                    "apt-get update\n",
+                    "apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D\n",
+                    "apt-add-repository 'deb https://apt.dockerproject.org/repo ubuntu-xenial main'\n",
+                    "apt-get update\n",
+                    "apt-get install -y docker-engine\n",
+                    "docker run -p 80:3000 -d imjacobclark/ngaas"
+                ]]}},
+                "SecurityGroupIds": [
+                    {"Ref" : "InstanceSecurityGroup"} 
+                ],
+                "InstanceType": "t2.nano"
+            }
+        },
+        "ElasticLoadBalancer" : {
+            "Type" : "AWS::ElasticLoadBalancing::LoadBalancer",
+            "DependsOn": "InternetGatewayToVPC",
+            "Properties" : {
+                "Instances" : [ 
+                    { "Ref" : "Instance" }
+                ],
+                "Listeners" : [ 
+                    {
+                        "LoadBalancerPort" : "80",
+                        "InstancePort" : 80,
+                        "Protocol" : "HTTP"
+                    } 
+                ],
+                "HealthCheck" : {
+                    "Target" : {
+                        "Fn::Join" : [ "", [ "HTTP:", 80, "/" ] ]
+                    },
+                    "HealthyThreshold" : "3",
+                    "UnhealthyThreshold" : "5",
+                    "Interval" : "30",
+                    "Timeout" : "5"
+                },
+                "SecurityGroups" : [ { "Ref" : "InstanceSecurityGroup" } ],
+                "Subnets" : [ { "Ref" : "Subnet" } ]
+            }
+        }
+    }
+}
