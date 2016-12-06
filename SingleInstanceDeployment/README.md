@@ -13,8 +13,7 @@ Creates a private VPC, Subnet, Internet Gateway, Route table, routes and a singl
 * Attached to the VPC
 
 ###### Route table
-* Routing the public internet to the internet (default) gateway (0.0.0.0/1)
-
+* Routing the public internet to the internet (default) gateway (0.0.0.0/0)
 ###### Security Group/Firewall
 * Allows 80 into instances within the VPC
 * Allows no outbound traffic from instances within the VPC
